@@ -1,0 +1,206 @@
+---
+title: "Divvy Bike Share 2024 Analysis"
+author: "Dmytro Khavrel"
+output: 
+  html_document:
+    theme: flatly
+    highlight: tango
+    toc: true
+    toc_depth: 2
+    number_sections: true
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+library(tidyverse)
+library(lubridate)
+library(scales)
+```
+
+# 🚲 Introduction: About Divvy
+
+Divvy is Chicago’s official bike share system, launched in 2013 and operated by **Lyft** in partnership with the **Chicago Department of Transportation (CDOT)**. It has grown into one of the largest bike share programs in North America, with:
+
+- Over **800 docking stations** across Chicago and nearby suburbs,
+- A fleet of **traditional pedal bikes** and **electric Divvy eBikes**,
+- Options for **casual riders** (pay-as-you-go) and **annual members**.
+
+Divvy continues expanding its network and electrified fleet, while aiming to convert more casual users into long-term members. This analysis uses full-year trip data from 2024 to explore ridership trends and support Divvy’s business goals.
+
+## 🎯 Project Goals
+
+This project answers key business questions:
+
+1. **How do annual members and casual riders use Divvy bikes differently?**
+2. **Why would casual riders buy annual memberships?**
+3. **How can Divvy use digital media to influence casual riders to become members?**
+
+We will use R to process, clean, analyze, and visualize real trip data, leading to insights and marketing recommendations.
+
+# 📥 Load & Prepare Data
+
+```{r}
+#setwd("Divvy Trips 2024")
+months <- sprintf("%02d", 1:12)
+files <- paste0("2024", months, "-divvy-tripdata.csv")
+
+divvy_2024 <- files %>% map_df(read_csv)
+
+# Ride duration
+divvy_2024$ride_length <- difftime(divvy_2024$ended_at, divvy_2024$started_at)
+divvy_2024$ride_length <- as.numeric(divvy_2024$ride_length)
+```
+
+```{r}
+divvy_2024_clean <- divvy_2024 %>%
+  distinct(ride_id, .keep_all = TRUE) %>%
+  drop_na(ride_id, started_at, ended_at, member_casual, rideable_type,
+          start_station_name, end_station_name, start_lat, start_lng, end_lat, end_lng) %>%
+  mutate(across(c(start_station_name, end_station_name), str_trim)) %>%
+  filter(
+    ride_length > 0,
+    start_station_name != "HQ QR",
+    between(start_lat, 40.73, 42.67),
+    between(end_lat, 40.73, 42.67),
+    between(start_lng, -88.94, -86.93),
+    between(end_lng, -88.94, -86.93),
+    nchar(start_station_name) > 1,
+    nchar(end_station_name) > 1
+  )
+
+# Add day of the week
+divvy_2024_clean <- divvy_2024_clean %>%
+  mutate(date = as.Date(started_at),
+         day_of_week = format(date, "%A"))
+```
+
+# 📊 Descriptive Statistics
+
+```{r}
+summary(divvy_2024_clean$ride_length)
+```
+
+## 🚲 Average Ride Length by Rider Type
+
+```{r}
+divvy_2024_clean %>%
+  group_by(member_casual) %>%
+  summarise(
+    mean_duration = mean(ride_length),
+    median_duration = median(ride_length),
+    max_duration = max(ride_length),
+    min_duration = min(ride_length)
+  )
+```
+
+# 📈 Ride Patterns
+
+## 🗓️ Weekly Ridership Count
+
+```{r}
+divvy_2024_clean %>%
+  mutate(weekday = wday(started_at, label = TRUE)) %>%
+  group_by(member_casual, weekday) %>%
+  summarise(number_of_rides = n(), .groups = "drop") %>%
+  ggplot(aes(x = weekday, y = number_of_rides, fill = member_casual)) +
+  geom_col(position = "dodge") +
+  scale_y_continuous(labels = label_comma()) +
+  labs(title = "Number of Rides by Rider Type", y = "Ride Count", x = "Weekday") +
+  theme_minimal()
+```
+
+## ⏱️ Average Duration per Day
+
+```{r}
+divvy_2024_clean %>%
+  mutate(weekday = wday(started_at, label = TRUE)) %>%
+  group_by(member_casual, weekday) %>%
+  summarise(average_duration = mean(ride_length), .groups = "drop") %>%
+  ggplot(aes(x = weekday, y = average_duration, fill = member_casual)) +
+  geom_col(position = "dodge") +
+  scale_y_continuous(labels = label_comma()) +
+  labs(title = "Average Ride Duration by Rider Type", y = "Duration (sec)", x = "Weekday") +
+  theme_minimal()
+```
+
+## 📍 Ride Start Heat Map
+
+```{r}
+divvy_2024_clean %>%
+  ggplot(aes(x = start_lng, y = start_lat)) +
+  geom_point(alpha = 0.05, color = "grey30") +
+  stat_density_2d(aes(fill = after_stat(level)), geom = "polygon", color = NA, contour = TRUE) +
+  scale_fill_viridis_c(option = "magma", direction = -1) +
+  coord_quickmap() +
+  facet_wrap(~ member_casual) +
+  labs(
+    title = "Ride Start Location Heat Map by User Type",
+    x = "Longitude",
+    y = "Latitude",
+    fill = "Density"
+  ) +
+  theme_minimal()
+```
+
+## 📍 Ride End Heat Map
+
+```{r}
+divvy_2024_clean %>%
+  ggplot(aes(x = end_lng, y = end_lat)) +
+  geom_point(alpha = 0.05, color = "grey30") +
+  stat_density_2d(aes(fill = after_stat(level)), geom = "polygon", color = NA, contour = TRUE) +
+  scale_fill_viridis_c(option = "plasma", direction = -1) +
+  coord_quickmap() +
+  facet_wrap(~ member_casual) +
+  labs(
+    title = "Ride End Location Heat Map by User Type",
+    x = "Longitude",
+    y = "Latitude",
+    fill = "Density"
+  ) +
+  theme_minimal()
+```
+
+
+# 📤 Export Clean Data
+
+```{r}
+write.csv(divvy_2024_clean, "divvy_2024_member_vs_casual.csv", row.names = FALSE)
+```
+
+# 🔍 Key Insights
+
+## ✅ How do annual members and casual riders differ?
+
+Casual riders tend to:
+
+* Ride more on weekends.
+* Take longer trips.
+* Use bikes for recreation.
+
+Annual members are more likely to:
+
+* Ride during weekdays.
+* Take shorter trips.
+* Use bikes for commuting or errands.
+
+## 💡 Why might casual riders convert to membership?
+
+* Regular weekend riders could save money by switching to an annual plan.
+* Convenience: easier access, no per-ride hassle.
+* Better value for frequent short rides.
+
+## 📣 Digital Marketing Strategy Suggestions
+
+* Targeted ads on weekends showing savings based on their usage.
+* Promote features like unlock speed and exclusive stations.
+* Offer trial discounts during peak casual riding months (e.g., summer).
+
+## 📌 Conclusion
+
+Divvy can grow its annual membership base by:
+
+* Understanding behavioral patterns,
+* Personalizing offers based on usage,
+* Making value propositions clear through data-driven digital media.
