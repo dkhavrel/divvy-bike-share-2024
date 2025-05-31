@@ -28,6 +28,6 @@ This project analyzes bike trip data from the **Divvy Bike Share system** in Chi
 - Ride duration comparisons
 - Usage patterns by day of the week and rider type
 
-## 🔗 Live HTML Report
+## 🌐 View Report Online
 
-[📂 View the rendered report](./Divvy_Bike_Share_2024.html)
+[Click here to view the interactive report](https://yourusername.github.io/divvy-bike-share-2024/)
