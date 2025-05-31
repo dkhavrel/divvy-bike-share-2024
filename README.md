@@ -30,4 +30,4 @@ This project analyzes bike trip data from the **Divvy Bike Share system** in Chi
 
 ## 🌐 View Report Online
 
-[Click here to view the interactive report](https://yourusername.github.io/divvy-bike-share-2024/)
+[Click here to view the interactive report](https://dkhavrel.github.io/divvy-bike-share-2024/)
